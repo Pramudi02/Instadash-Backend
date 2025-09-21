@@ -201,11 +201,11 @@ resource webApp 'Microsoft.Web/sites@2022-03-01' = {
         }
         {
           name: 'EmailSettings__SenderEmail'
-          value: 'your-email@gmail.com'
+          value: 'allybees23@gmail.com'
         }
         {
           name: 'EmailSettings__SenderName'
-          value: 'InstaDash App'
+          value: 'Allybees Support'
         }
         {
           name: 'EmailSettings__Password'
