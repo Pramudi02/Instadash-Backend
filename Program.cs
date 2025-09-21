@@ -14,10 +14,24 @@ using MongoDB.Driver;
 using QuestPDF.Infrastructure;
 using Backend.Hubs;
 
-DotNetEnv.Env.Load(Path.Combine(Directory.GetCurrentDirectory(), "..", ".env"));
-//DotNetEnv.Env.Load(@"C:\Users\pramu\OneDrive\Desktop\git_projects\ab.uom.project\.env");
-Console.WriteLine("✅ EMAIL_USER from .env: " + Environment.GetEnvironmentVariable("EMAIL_USER"));
-Console.WriteLine("EMAIL_PASSWORD is empty = " + string.IsNullOrEmpty(Environment.GetEnvironmentVariable("EMAIL_PASSWORD")));
+// Only load .env file in development mode
+var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Development";
+if (environment == "Development")
+{
+    var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
+    if (File.Exists(envPath))
+    {
+        DotNetEnv.Env.Load(envPath);
+        Console.WriteLine("✅ .env file loaded");
+    }
+    else
+    {
+        Console.WriteLine("⚠️ .env file not found, using environment variables");
+    }
+    
+    Console.WriteLine("✅ EMAIL_USER from environment: " + Environment.GetEnvironmentVariable("EMAIL_USER"));
+    Console.WriteLine("EMAIL_PASSWORD is configured: " + !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("EMAIL_PASSWORD")));
+}
 
 QuestPDF.Settings.License = LicenseType.Community;
 
