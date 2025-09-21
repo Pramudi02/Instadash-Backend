@@ -19,11 +19,10 @@ var resourceToken = uniqueString(subscription().id, resourceGroup().id, location
 var abbrs = {
   keyVaultVaults: 'kv'
   logAnalyticsWorkspaces: 'log'
-  containerRegistries: 'cr'
-  containerApps: 'ca'
-  containerAppsEnvironments: 'cae'
   managedIdentityUserAssignedIdentities: 'id'
   insightsComponents: 'ai'
+  webSites: 'app'
+  appServicePlans: 'asp'
 }
 
 // Tags that should be applied to all resources
@@ -106,49 +105,26 @@ resource userAccessPolicy 'Microsoft.KeyVault/vaults/accessPolicies@2022-07-01' 
   }
 }
 
-// Container Registry
-resource containerRegistry 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' = {
-  name: '${abbrs.containerRegistries}${resourceToken}'
+// App Service Plan
+resource appServicePlan 'Microsoft.Web/serverfarms@2022-03-01' = {
+  name: '${abbrs.appServicePlans}${resourceToken}'
   location: location
   tags: tags
   sku: {
-    name: 'Basic'
+    name: 'B1'
+    tier: 'Basic'
+    size: 'B1'
+    family: 'B'
+    capacity: 1
   }
   properties: {
-    adminUserEnabled: false
+    reserved: false
   }
 }
 
-// Role assignment for managed identity to access container registry
-resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.id, managedIdentity.id, '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  scope: containerRegistry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: managedIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Container Apps Environment
-resource containerAppsEnvironment 'Microsoft.App/managedEnvironments@2023-05-01' = {
-  name: '${abbrs.containerAppsEnvironments}${resourceToken}'
-  location: location
-  tags: tags
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
-  }
-}
-
-// Container App for the backend API
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: '${abbrs.containerApps}${resourceToken}'
+// Web App
+resource webApp 'Microsoft.Web/sites@2022-03-01' = {
+  name: '${abbrs.webSites}${resourceToken}'
   location: location
   tags: union(tags, { 'azd-service-name': 'backend' })
   identity: {
@@ -158,156 +134,106 @@ resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
     }
   }
   properties: {
-    managedEnvironmentId: containerAppsEnvironment.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 10000
-        corsPolicy: {
-          allowedOrigins: ['http://localhost:4200', 'https://localhost:4200']
-          allowedMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-          allowedHeaders: ['*']
-          allowCredentials: true
-        }
-      }
-      registries: [
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      netFrameworkVersion: 'v8.0'
+      appSettings: [
         {
-          server: containerRegistry.properties.loginServer
-          identity: managedIdentity.id
+          name: 'ASPNETCORE_ENVIRONMENT'
+          value: 'Production'
+        }
+        {
+          name: 'MongoDBSettings__ConnectionString'
+          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=mongodb-connection-string)'
+        }
+        {
+          name: 'MongoDBSettings__DatabaseName'
+          value: 'ab-uom'
+        }
+        {
+          name: 'MongoDBSettings__AdminDatabaseName'
+          value: 'admin-db'
+        }
+        {
+          name: 'MongoDBSettings__UserDetailsdatabase'
+          value: 'UserDetails'
+        }
+        {
+          name: 'MongoDBSettings__UserDetailsCollectionName'
+          value: 'userdetailscollection'
+        }
+        {
+          name: 'MongoDBSettings__PasswordResetCollectionName'
+          value: 'passwordresets'
+        }
+        {
+          name: 'MongoDBSettings__UsersCollectionName'
+          value: 'instadash'
+        }
+        {
+          name: 'MongoDBSettings__HoneycombCollectionName'
+          value: 'honeycomb-db'
+        }
+        {
+          name: 'JwtSettings__Key'
+          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=jwt-key)'
+        }
+        {
+          name: 'JwtSettings__Issuer'
+          value: 'sdp-auth-server'
+        }
+        {
+          name: 'JwtSettings__Audience'
+          value: 'sdp-app-users'
+        }
+        {
+          name: 'JwtSettings__ExpiresInMinutes'
+          value: '60'
+        }
+        {
+          name: 'EmailSettings__SmtpServer'
+          value: 'smtp.gmail.com'
+        }
+        {
+          name: 'EmailSettings__SmtpPort'
+          value: '587'
+        }
+        {
+          name: 'EmailSettings__SenderEmail'
+          value: 'your-email@gmail.com'
+        }
+        {
+          name: 'EmailSettings__SenderName'
+          value: 'InstaDash App'
+        }
+        {
+          name: 'EmailSettings__Password'
+          value: '@Microsoft.KeyVault(VaultName=${keyVault.name};SecretName=email-password)'
+        }
+        {
+          name: 'EmailSettings__UseSsl'
+          value: 'true'
+        }
+        {
+          name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+          value: applicationInsights.properties.ConnectionString
         }
       ]
-      secrets: [
-        {
-          name: 'mongodb-connection-string'
-          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/mongodb-connection-string'
-          identity: managedIdentity.id
-        }
-        {
-          name: 'jwt-key'
-          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/jwt-key'
-          identity: managedIdentity.id
-        }
-        {
-          name: 'email-password'
-          keyVaultUrl: '${keyVault.properties.vaultUri}secrets/email-password'
-          identity: managedIdentity.id
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
-          name: 'backend'
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-          env: [
-            {
-              name: 'ASPNETCORE_ENVIRONMENT'
-              value: 'Production'
-            }
-            {
-              name: 'ASPNETCORE_URLS'
-              value: 'http://+:10000'
-            }
-            {
-              name: 'MongoDBSettings__ConnectionString'
-              secretRef: 'mongodb-connection-string'
-            }
-            {
-              name: 'MongoDBSettings__DatabaseName'
-              value: 'ab-uom'
-            }
-            {
-              name: 'MongoDBSettings__AdminDatabaseName'
-              value: 'admin-db'
-            }
-            {
-              name: 'MongoDBSettings__UserDetailsdatabase'
-              value: 'UserDetails'
-            }
-            {
-              name: 'MongoDBSettings__UserDetailsCollectionName'
-              value: 'userdetailscollection'
-            }
-            {
-              name: 'MongoDBSettings__PasswordResetCollectionName'
-              value: 'passwordresets'
-            }
-            {
-              name: 'MongoDBSettings__UsersCollectionName'
-              value: 'instadash'
-            }
-            {
-              name: 'MongoDBSettings__HoneycombCollectionName'
-              value: 'honeycomb-db'
-            }
-            {
-              name: 'JwtSettings__Key'
-              secretRef: 'jwt-key'
-            }
-            {
-              name: 'JwtSettings__Issuer'
-              value: 'sdp-auth-server'
-            }
-            {
-              name: 'JwtSettings__Audience'
-              value: 'sdp-app-users'
-            }
-            {
-              name: 'JwtSettings__ExpiresInMinutes'
-              value: '60'
-            }
-            {
-              name: 'EmailSettings__SmtpServer'
-              value: 'smtp.gmail.com'
-            }
-            {
-              name: 'EmailSettings__SmtpPort'
-              value: '587'
-            }
-            {
-              name: 'EmailSettings__SenderEmail'
-              value: 'your-email@gmail.com'
-            }
-            {
-              name: 'EmailSettings__SenderName'
-              value: 'InstaDash App'
-            }
-            {
-              name: 'EmailSettings__Password'
-              secretRef: 'email-password'
-            }
-            {
-              name: 'EmailSettings__UseSsl'
-              value: 'true'
-            }
-            {
-              name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
-              value: applicationInsights.properties.ConnectionString
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 0
-        maxReplicas: 10
+      cors: {
+        allowedOrigins: [
+          'http://localhost:4200'
+          'https://localhost:4200'
+        ]
+        supportCredentials: true
       }
     }
   }
-  dependsOn: [
-    acrPullRoleAssignment
-  ]
 }
 
 // Outputs required by AZD
 output RESOURCE_GROUP_ID string = resourceGroup().id
-output AZURE_CONTAINER_REGISTRY_ENDPOINT string = containerRegistry.properties.loginServer
-output AZURE_CONTAINER_REGISTRY_NAME string = containerRegistry.name
 output AZURE_KEY_VAULT_NAME string = keyVault.name
 output AZURE_KEY_VAULT_ENDPOINT string = keyVault.properties.vaultUri
-output BACKEND_URL string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
-output AZURE_CONTAINER_APP_NAME string = containerApp.name
-output AZURE_CONTAINER_APP_ENVIRONMENT_NAME string = containerAppsEnvironment.name
+output BACKEND_URL string = 'https://${webApp.properties.defaultHostName}'
+output AZURE_WEB_APP_NAME string = webApp.name
