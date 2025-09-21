@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+
+name: instadash-backend
+metadata:
+  template: instadash-backend@0.0.1-beta
+
+services:
+  backend:
+    project: .
+    language: csharp
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      context: .
+
+hooks:
+  postdeploy:
+    shell: sh
+    run: |
+      echo "Deployment completed successfully!"
+      echo "Please configure the following secrets in Azure Key Vault:"
+      echo "1. mongodb-connection-string: Your MongoDB connection string"
+      echo "2. jwt-key: A secure JWT signing key (at least 32 characters)"
+      echo "3. email-password: Your email service password/app password"
+      echo ""
+      echo "Backend API URL: $BACKEND_URL"
+    continueOnError: false
