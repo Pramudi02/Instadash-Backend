@@ -12,13 +12,9 @@ services:
 
 hooks:
   postdeploy:
-    shell: sh
+    shell: pwsh
     run: |
-      echo "Deployment completed successfully!"
-      echo "Please configure the following secrets in Azure Key Vault:"
-      echo "1. mongodb-connection-string: Your MongoDB connection string"
-      echo "2. jwt-key: A secure JWT signing key (at least 32 characters)"
-      echo "3. email-password: Your email service password/app password"
-      echo ""
-      echo "Backend API URL: $BACKEND_URL"
+      Write-Host "Deployment completed successfully!"
+      Write-Host "Backend API URL: $env:BACKEND_URL"
+      Write-Host "All secrets have been configured in Azure Key Vault."
     continueOnError: false
